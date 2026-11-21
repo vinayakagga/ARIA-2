@@ -1,0 +1,12 @@
+# ARIA Backend Dependencies
+
+# MQTT transport client (callback API v2)
+paho-mqtt==2.2.0
+
+# HTTP server and REST API for dashboard (Phase 4)
+flask==3.1.3
+
+# Up-to-date CA certificate bundle for SSL verification (Open-Meteo HTTPS requests).
+# Required because the Python uv runtime ships with OpenSSL whose bundled CA store
+# may contain expired roots. certifi provides a fresh Mozilla CA bundle.
+certifi>=2024.2.2

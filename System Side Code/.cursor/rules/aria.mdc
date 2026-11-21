@@ -1,0 +1,45 @@
+---
+description: ARIA project guardrails. Apply to all files in this repository.
+alwaysApply: true
+---
+
+# ARIA project rules
+
+Before every task, read `docs/PROJECT_SPEC.md`, `WORKDONE.md`, and `CURSOR_BUILD_BRIEF.md` (or the equivalent files if names/locations differ). Inspect the current repository and Git diff before editing.
+
+## Scope
+- ARIA is a manual-only 2WD environmental-monitoring rover.
+- Temporary ESP32-C3 Mini is initially a simulated MQTT publisher. Standard ESP32 DevKit is planned but not yet verified.
+- No autonomous navigation, servo, soil-moisture sensor, cloud dependency, crop disease prediction, or unsupported air-quality/CO2 claims.
+- HC-SR04 is distance/proximity measurement and a forward-motion safety inhibit only.
+- Never present simulated telemetry as real sensor data.
+
+## No guessing
+- Never invent hardware revisions, pins, wiring, voltage/current ratings, calibration, credentials, test results, or completed features.
+- Mark unknowns as unknown and ask the user or create a verification task.
+- Do not apply classic ESP32 pin mappings to ESP32-C3.
+- Do not generate final motor wiring/firmware until the actual board, driver, motors and power system are verified.
+- MQ-135 values are raw/un calibrated unless a documented calibration is supplied.
+
+## Implementation discipline
+- Work one authorised phase at a time. Current authorised work: environment audit and Python MQTT receiver only.
+- Do not build later phases early.
+- Before edits, state task, files to change and acceptance tests.
+- Make minimal changes; preserve existing work; never delete/overwrite without approval.
+- Use Windows PowerShell-compatible commands.
+- Use Python 3.12 in the repository `.venv`; never install packages globally.
+- Use Flask, Paho MQTT, SQLite, vanilla HTML/CSS/JS, Chart.js and Leaflet as approved. No React, Node build system, Docker, Redis, PostgreSQL, cloud services or extra frameworks without approval.
+- Pin tested Python dependencies. Explain and document any new dependency.
+- Keep secrets out of source control; use `.env` and `.env.example`.
+- Validate MQTT JSON and types. Bad messages must not crash the service.
+- Use parameterized SQL and bounded API queries.
+- Keep MQTT callbacks lightweight.
+- Store timestamps consistently; document UTC storage and local display conversion.
+- Movement commands must never be retained. Do not energize motors in current phases.
+
+## Verification and reporting
+- Run tests relevant to the change and report actual command/output/result.
+- Never claim unrun tests passed.
+- If tests cannot be run, mark NOT VERIFIED and explain why.
+- Update `WORKDONE.md` after each meaningful task with files, commands, observed results, unresolved issues and next action.
+- Stop after the authorised phase and request approval before proceeding.

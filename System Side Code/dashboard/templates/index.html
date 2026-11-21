@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ARIA — Agricultural Rover Intelligence & Monitoring Station</title>
+  
+  <!-- Leaflet CSS for GPS Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  
+  <!-- Dashboard Styling -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+<body>
+
+  <!-- Top Navigation & Header -->
+  <header class="app-header">
+    <div class="brand">
+      <div class="logo-badge">
+        <span class="logo-mark">FIELD</span>
+        <span class="logo-title">ARIA</span>
+      </div>
+      <div>
+        <h1>ARIA <span class="badge badge-accent">ROVER STATION</span></h1>
+        <p class="subtitle">Agricultural Rover Intelligence & Field Monitoring — Manual Operating Mode</p>
+      </div>
+    </div>
+    
+    <div class="header-actions">
+      <!-- Data Provenance Badge: SIMULATED vs REAL -->
+      <div id="provenanceBadge" class="badge badge-unknown">
+        <span class="dot"></span>
+        <span id="provenanceText">CHECKING PROVENANCE...</span>
+      </div>
+
+      <!-- Live Polling Indicator -->
+      <div class="poll-status">
+        <span class="pulse-indicator"></span>
+        <span id="lastUpdated">Connecting...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Stale / Offline Notification Banner -->
+  <div id="staleAlert" class="alert-banner alert-warning" style="display: none;">
+    <span class="alert-icon">⚠️</span>
+    <span id="staleMessage">Telemetry data is stale. Values may not reflect live field conditions.</span>
+  </div>
+
+  <main class="dashboard-container">
+
+    <!-- 1. System Connectivity Status Bar -->
+    <section class="card connectivity-card">
+      <h2 class="section-title">System Connectivity</h2>
+      <div class="status-grid">
+        
+        <!-- MQTT Broker -->
+        <div class="status-node" id="nodeBroker">
+          <div class="node-header">
+            <span class="node-title">MQTT Broker</span>
+            <span id="brokerStatusPill" class="badge badge-neutral">CHECKING</span>
+          </div>
+          <div class="node-body">
+            <div class="metric-row"><span>Host:</span><span id="brokerHost">127.0.0.1:1883</span></div>
+            <div class="metric-row"><span>Transport:</span><span>TCP (Mosquitto)</span></div>
+          </div>
+        </div>
+
+        <!-- Web Backend -->
+        <div class="status-node" id="nodeBackend">
+          <div class="node-header">
+            <span class="node-title">Flask Backend</span>
+            <span id="backendStatusPill" class="badge badge-neutral">CHECKING</span>
+          </div>
+          <div class="node-body">
+            <div class="metric-row"><span>API:</span><span id="apiStatus">/api/v1/health</span></div>
+            <div class="metric-row"><span>Storage:</span><span id="dbStatus">SQLite WAL</span></div>
+          </div>
+        </div>
+
+        <!-- Rover Device -->
+        <div class="status-node" id="nodeDevice">
+          <div class="node-header">
+            <span class="node-title">Rover Device</span>
+            <span id="deviceStatusPill" class="badge badge-neutral">NO CONTACT</span>
+          </div>
+          <div class="node-body">
+            <div class="metric-row"><span>Device ID:</span><span id="deviceId">—</span></div>
+            <div class="metric-row"><span>Wi-Fi Signal:</span><span id="deviceRssi">—</span></div>
+            <div class="metric-row"><span>Uptime:</span><span id="deviceUptime">—</span></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 2. Environmental Metrics Grid (2x2 Agricultural Sensor Array) -->
+    <section class="metrics-grid">
+      
+      <!-- Temperature -->
+      <div class="metric-card" id="cardTemp">
+        <div class="card-meta">
+          <div class="metric-label">Ambient Temperature</div>
+          <div class="metric-sensor">DHT22 Digital Sensor</div>
+        </div>
+        <div class="metric-value-container">
+          <span class="metric-value" id="valTemp">--</span>
+          <span class="metric-unit">°C</span>
+        </div>
+        <div class="metric-state" id="stateTemp">Waiting for data...</div>
+      </div>
+
+      <!-- Humidity -->
+      <div class="metric-card" id="cardHumidity">
+        <div class="card-meta">
+          <div class="metric-label">Relative Humidity</div>
+          <div class="metric-sensor">DHT22 Digital Sensor</div>
+        </div>
+        <div class="metric-value-container">
+          <span class="metric-value" id="valHumidity">--</span>
+          <span class="metric-unit">%</span>
+        </div>
+        <div class="metric-state" id="stateHumidity">Waiting for data...</div>
+      </div>
+
+      <!-- Ambient Light -->
+      <div class="metric-card" id="cardLight">
+        <div class="card-meta">
+          <div class="metric-label">Solar & Ambient Illuminance</div>
+          <div class="metric-sensor">BH1750 I²C Sensor</div>
+        </div>
+        <div class="metric-value-container">
+          <span class="metric-value" id="valLight">--</span>
+          <span class="metric-unit">lux</span>
+        </div>
+        <div class="metric-state" id="stateLight">Waiting for data...</div>
+      </div>
+
+      <!-- Gas Sensor (MQ-135) - Raw ADC Only -->
+      <div class="metric-card" id="cardGas">
+        <div class="card-meta">
+          <div class="metric-label">Air Quality Index (MQ-135)</div>
+          <div class="metric-sensor">Raw Analogue Voltage (12-bit ADC)</div>
+        </div>
+        <div class="metric-value-container">
+          <span class="metric-value" id="valGas">--</span>
+          <span class="metric-unit">ADC raw</span>
+        </div>
+        <div class="metric-disclaimer">
+          ⚠️ Uncalibrated raw ADC reading (0–4095). Not calibrated ppm or CO₂ concentration.
+        </div>
+      </div>
+
+    </section>
+
+    <!-- 3. Agronomic Advice & Field Intelligence -->
+    <section class="card advice-section" id="adviceSection">
+      <div class="advice-header">
+        <div class="advice-title-group">
+          <div class="advice-heading-row">
+            <h2 class="section-title">Agronomic Advice &amp; Field Intelligence</h2>
+            <span id="adviceModeBadge" class="badge badge-neutral">NO ADVICE LOADED</span>
+            <span id="adviceProviderBadge" class="badge badge-neutral">—</span>
+          </div>
+          <p class="section-subtitle">Hybrid deterministic environmental rules cross-referenced with localized weather and NVIDIA AI guidance.</p>
+        </div>
+        <div class="advice-actions">
+          <button class="btn btn-primary btn-generate-advice" id="btnGenerateAdvice">
+            <span class="btn-icon">⚡</span>
+            <span id="btnGenerateAdviceText">Generate Advice</span>
+          </button>
+          <div id="adviceCooldownIndicator" class="advice-cooldown-text" style="display: none;">
+            ⏱️ Cooldown active: <span id="adviceCooldownTimer">--</span>s
+          </div>
+        </div>
+      </div>
+
+      <!-- Action status / error alert -->
+      <div id="adviceAlert" class="alert-banner alert-warning" style="display: none;">
+        <span class="alert-icon">⚠️</span>
+        <span id="adviceAlertText">Advice generation warning</span>
+      </div>
+
+      <!-- Advice Content Container -->
+      <div class="advice-body" id="adviceBody">
+        
+        <!-- Empty / Pending State -->
+        <div id="adviceEmptyState" class="advice-empty-state">
+          <span class="empty-icon">🌱</span>
+          <p>No agricultural advice generated yet.</p>
+          <small>Click "Generate Advice" to evaluate rover sensors, local weather, and AI recommendations.</small>
+        </div>
+
+        <!-- Loaded Advice View (hidden initially) -->
+        <div id="adviceContent" style="display: none;">
+
+          <!-- Unrefreshed Advice Notice (when live telemetry has updated since advice evaluation) -->
+          <div id="adviceStaleTelemetryNotice" class="alert-banner alert-warning" style="display: none; margin-bottom: 1rem;">
+            <span class="alert-icon">⚠️</span>
+            <span id="adviceStaleTelemetryMessage">New live telemetry received since last advice generation. Displayed advice reflects earlier field readings and has not yet been refreshed.</span>
+          </div>
+
+          <!-- Executive Summary -->
+          <div class="advice-summary-box" id="adviceSummaryBox">
+            <div class="summary-header">
+              <div class="summary-label-group">
+                <span class="summary-label">Executive Field Summary</span>
+                <span id="adviceTelemetryFreshnessBadge" class="badge badge-neutral">—</span>
+                <span id="adviceGpsProvenanceBadge" class="badge badge-neutral">—</span>
+              </div>
+              <div class="summary-meta-group">
+                <span class="advice-meta-time">Advice: <strong id="adviceTimestamp">—</strong></span>
+                <span class="advice-meta-time">Telemetry: <strong id="adviceTelemetryTime">—</strong></span>
+              </div>
+            </div>
+            <p id="adviceSummaryText" class="advice-summary-text">—</p>
+          </div>
+
+          <!-- Recommendations Block -->
+          <div class="advice-block">
+            <h3 class="advice-block-title">Field Management Recommendations</h3>
+            <div id="adviceRecommendationsList" class="recommendations-list">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- Dual Column: Sensor Health Audit + Weather Context -->
+          <div class="advice-columns-grid">
+            
+            <!-- Sensor Health Status -->
+            <div class="advice-subcard">
+              <h4 class="subcard-title">Sensor Health Audit</h4>
+              <div id="sensorHealthList" class="sensor-health-list">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+
+            <!-- Weather & Microclimate Context -->
+            <div class="advice-subcard">
+              <h4 class="subcard-title">Localized Weather Context</h4>
+              <div id="weatherContextBody" class="weather-context-body">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Environmental Rule Observations Block -->
+          <div class="advice-block" id="observationsBlock">
+            <h3 class="advice-block-title">Deterministic Rule Observations</h3>
+            <div id="adviceObservationsList" class="observations-list">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- Limitations & Guardrail Disclaimers -->
+          <div class="advice-limitations-box" id="adviceLimitationsBox">
+            <div class="limitations-header">
+              <span class="limitations-icon">ℹ️</span>
+              <span class="limitations-label">Operating Notices &amp; Guardrail Disclaimers</span>
+            </div>
+            <ul id="adviceLimitationsList" class="limitations-list">
+              <!-- Dynamically populated -->
+            </ul>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 4. Rover Manual Control Section -->
+    <section class="card control-section">
+      <div class="control-header">
+        <div>
+          <h2 class="section-title">ARIA Rover Control</h2>
+          <p class="section-subtitle">2WD L298N Drive • Press &amp; hold to move • Auto-stops on release • 500 ms hardware safety timeout</p>
+        </div>
+        <div class="control-status-pill">
+          <span class="control-status-label">Stream:</span>
+          <span id="currentCommandReadout" class="badge badge-neutral">IDLE (STOP)</span>
+        </div>
+      </div>
+
+      <!-- Warning banner if rover is offline -->
+      <div id="controlLockBanner" class="alert-banner alert-warning" style="display: none;">
+        <span class="alert-icon">🔒</span>
+        <span>Rover is offline. Movement controls are locked until contact is re-established.</span>
+      </div>
+
+      <!-- Warning banner if command transmission fails -->
+      <div id="commandAlert" class="alert-banner alert-danger" style="display: none;">
+        <span class="alert-icon">⚠️</span>
+        <span id="commandAlertText">Command transmission failed! ESP32 500 ms safety timeout active.</span>
+      </div>
+
+      <div class="control-body">
+        <!-- Directional D-Pad -->
+        <div class="dpad-container" id="dpadContainer">
+          <div class="dpad-grid">
+            <div class="dpad-cell"></div>
+            <div class="dpad-cell">
+              <button class="btn btn-control btn-dir" id="btnForward" data-command="forward" aria-label="Forward">
+                <span class="dir-icon">▲</span>
+                <span class="dir-label">FWD</span>
+              </button>
+            </div>
+            <div class="dpad-cell"></div>
+
+            <div class="dpad-cell">
+              <button class="btn btn-control btn-dir" id="btnLeft" data-command="left" aria-label="Turn Left">
+                <span class="dir-icon">◀</span>
+                <span class="dir-label">LEFT</span>
+              </button>
+            </div>
+            <div class="dpad-cell">
+              <button class="btn btn-control btn-center-stop" id="btnCenterStop" data-command="stop" aria-label="Stop">
+                <span class="dir-icon">■</span>
+                <span class="dir-label">STOP</span>
+              </button>
+            </div>
+            <div class="dpad-cell">
+              <button class="btn btn-control btn-dir" id="btnRight" data-command="right" aria-label="Turn Right">
+                <span class="dir-icon">▶</span>
+                <span class="dir-label">RIGHT</span>
+              </button>
+            </div>
+
+            <div class="dpad-cell"></div>
+            <div class="dpad-cell">
+              <button class="btn btn-control btn-dir" id="btnReverse" data-command="reverse" aria-label="Reverse">
+                <span class="dir-icon">▼</span>
+                <span class="dir-label">REV</span>
+              </button>
+            </div>
+            <div class="dpad-cell"></div>
+          </div>
+        </div>
+
+        <!-- Emergency Action & Instructions -->
+        <div class="control-actions">
+          <button class="btn btn-emergency-stop" id="btnEmergencyStop" data-command="stop">
+            <span class="stop-symbol">🛑</span>
+            <span class="stop-text">EMERGENCY STOP</span>
+          </button>
+
+          <div class="control-safety-notes">
+            <h4>Operating Safety Protocols</h4>
+            <ul>
+              <li><strong>Continuous Hold:</strong> Hold control to stream commands every 200 ms. Releasing immediately dispatches STOP.</li>
+              <li><strong>Hardware Timeout:</strong> Motors stop automatically within 500 ms if command packet stream ceases.</li>
+              <li><strong>Safety Release:</strong> Window blur, tab switching, and pointer release trigger immediate STOP.</li>
+              <li><strong>Verification Scope:</strong> Displays requested command stream only. Does not confirm physical rover movement.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. GPS Geolocation & Field Map -->
+    <section class="card gps-section">
+      <div class="gps-header">
+        <div>
+          <h2 class="section-title">GPS Geolocation (NEO-6M)</h2>
+          <p class="section-subtitle">Real-time outdoor coordinates. Rover marker renders exclusively when a valid fix exists.</p>
+        </div>
+        <span id="gpsFixBadge" class="badge badge-warning">NO GPS FIX</span>
+      </div>
+
+      <div class="gps-body">
+        <!-- Coordinates & Details -->
+        <div class="gps-details">
+          <div class="coord-box">
+            <span class="coord-label">Latitude</span>
+            <span class="coord-val" id="gpsLat">--</span>
+          </div>
+          <div class="coord-box">
+            <span class="coord-label">Longitude</span>
+            <span class="coord-val" id="gpsLon">--</span>
+          </div>
+          <div class="coord-box">
+            <span class="coord-label">Satellites</span>
+            <span class="coord-val" id="gpsSats">--</span>
+          </div>
+          <div class="coord-box">
+            <span class="coord-label">Altitude</span>
+            <span class="coord-val" id="gpsAlt">--</span>
+          </div>
+          <div class="coord-box">
+            <span class="coord-label">Speed</span>
+            <span class="coord-val" id="gpsSpd">--</span>
+          </div>
+        </div>
+
+        <!-- Leaflet Map Container -->
+        <div class="map-wrapper">
+          <div id="gpsMap" class="map-container"></div>
+          <div id="noFixOverlay" class="map-overlay">
+            <div class="overlay-content">
+              <span class="overlay-icon">🛰️</span>
+              <p>GPS Fix Not Available</p>
+              <small>Position markers are hidden until outdoor satellite lock is established.</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. Historical Time-Series Charts (Environmental Only) -->
+    <section class="card charts-section">
+      <h2 class="section-title">Environmental History (Chart.js)</h2>
+      <p class="section-subtitle">Real-time bounded sensor readings ordered chronologically.</p>
+
+      <div class="charts-grid">
+        <!-- Chart 1: Temperature & Humidity -->
+        <div class="chart-container">
+          <canvas id="chartTempHum"></canvas>
+        </div>
+
+        <!-- Chart 2: Light & Gas Raw ADC -->
+        <div class="chart-container">
+          <canvas id="chartLightGas"></canvas>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="app-footer">
+    <p>ARIA Agricultural Environmental Monitoring Station • Manual Control Mode • Local Wi-Fi Network Operation</p>
+  </footer>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+
+  <!-- Dashboard Client Logic -->
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
